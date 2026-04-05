@@ -15,13 +15,13 @@ parameters:
   default: 'centralindia'
 - name: appName
   type: string
-  default: 'Enterprise-DemandGeneration-SEA-DB-CP'
+  default: 'Project-Alpha-India'
 - name: webAppName
   type: string
   default: 'dotnet-connectpluscpbackend'
 - name: subscriptionId
   type: string
-  default: '0b3918b5-4679-4783-9724-f17bc3d199b8'
+  default: '7831e4eb-265f-48c0-b2ca-f7370a400a35'
 - name: environment
   type: string
   default: 'dev'
@@ -41,13 +41,13 @@ pool:
   vmImage: windows-latest
 
 stages:
-#  - template: azure-pipeline-database-creation.yml
-#    parameters:
-#      appName: ${{ parameters.appName }}
-#      subscriptionId: ${{ parameters.subscriptionId }}
-#      environment: ${{ parameters.environment }}
-#      TemplateFolder:  ${{ parameters.TemplateFolder }}
-#     condition: succeeded()
+ - template: azure-pipeline-database-creation.yml
+   parameters:
+     appName: ${{ parameters.appName }}
+     subscriptionId: ${{ parameters.subscriptionId }}
+     environment: ${{ parameters.environment }}
+     TemplateFolder:  ${{ parameters.TemplateFolder }}
+     condition: succeeded()
 
 # Build and Deploy .NET backend Service to app
 #  - template: azure-backendapp.yml
@@ -68,11 +68,11 @@ stages:
 #       keyVaultName: ${{ format('connectplus-kv-cp-{0}', parameters.environment) }}
 
 # Deploy the Key Vault secrets using Bicep template
-- template: azure-pipeline-keyvault-secrets.yml
-  parameters:
-    azureServiceConnection: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
-    resourceGroupName: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
-    keyVaultName: ${{ format('connectplus-kv-cp-{0}', parameters.environment) }}
+# - template: azure-pipeline-keyvault-secrets.yml
+#   parameters:
+#     azureServiceConnection: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
+#     resourceGroupName: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
+#     keyVaultName: ${{ format('connectplus-kv-cp-{0}', parameters.environment) }}
 
 
 # # ### Deploy the scheduler logicApp for salesforce 

@@ -5,7 +5,7 @@ parameters:
 
 - name: subscriptionId
   type: string
-  default: 'ac4ac193-b173-4d5f-92af-6739adc86f5f'   # ✅ your real subscription ID
+  default: '7831e4eb-265f-48c0-b2ca-f7370a400a35'   # ✅ your real subscription ID
 
 - name: environment
   type: string
@@ -18,7 +18,7 @@ parameters:
 
 - name: appName
   type: string
-  default: 'Enterprise-DemandGeneration-SEA-DB'
+  default: 'Project-Alpha-India'
 
 - name: TemplateFolder
   type: string

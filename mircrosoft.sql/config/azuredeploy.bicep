@@ -2,7 +2,7 @@
 // param sasToken string
 param storageSKU string = 'Standard_LRS'
 param administratorLogin string = 'administratorLogin'
-param administratorLoginPassword string = 'Admin@8874'
+param administratorLoginPassword string = 'password@123' // Change this to a secure password in production
 param environment string = 'dev'
 param skuname string = 'S0'
 param skutier string = 'Standard'

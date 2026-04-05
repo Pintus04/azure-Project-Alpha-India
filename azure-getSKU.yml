@@ -4,7 +4,7 @@ parameters:
   default: 'centralindia'
 - name: subscriptionId
   type: string
-  default: '75bf482e-ac2b-4bb8-b8af-b9d2f3833947'
+  default: '7831e4eb-265f-48c0-b2ca-f7370a400a35'
 - name: environment
   type: string
   default: 'dev'
@@ -13,7 +13,7 @@ parameters:
   default: true
 - name: webAppName
   type: string
-  default: 'Enterprise-DemandGeneration-SEA-DB-PROD'
+  default: 'Project-Alpha-India'
 - name: appServiceName
   type: string
   default: 'pro-connectpluscpbackend'
