@@ -125,7 +125,7 @@ stages:
 
 - stage: DepoyBicepTemplateSQL
   displayName: Deploying Bicep Template for SQL Database
-  variables:
+  #variables:
     #_ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
   jobs:
     - job: sqlDatabase
