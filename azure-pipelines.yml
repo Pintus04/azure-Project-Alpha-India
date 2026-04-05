@@ -47,7 +47,7 @@ stages:
      subscriptionId: ${{ parameters.subscriptionId }}
      environment: ${{ parameters.environment }}
      TemplateFolder:  ${{ parameters.TemplateFolder }}
-     condition: succeeded()
+     #condition: succeeded()
 
 # Build and Deploy .NET backend Service to app
 #  - template: azure-backendapp.yml
