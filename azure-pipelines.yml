@@ -22,14 +22,14 @@ parameters:
 - name: subscriptionId
   type: string
   default: '7831e4eb-265f-48c0-b2ca-f7370a400a35'
-- name: environment
-  type: string
-  default: 'dev'
-  values:
-    - 'dev'
-    - 'uat'
-    - 'prod'
-    - 'test'
+# - name: environment
+#   type: string
+#   default: 'dev'
+#   values:
+#     - 'dev'
+#     - 'uat'
+#     - 'prod'
+#     - 'test'
 # - name: condition
 #   default: true
 - name: EnableSchedulerDeployment
