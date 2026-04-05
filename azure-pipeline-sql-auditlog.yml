@@ -1,0 +1,123 @@
+parameters:
+- name: location
+  type: string
+  default: 'centralindia'
+- name: subscriptionId
+  type: string
+  default: '0b3918b5-4679-4783-9724-f17bc3d199b8'
+- name: environment
+  type: string
+  default: 'dev'
+  values:
+    - 'dev'
+    - 'uat'
+    - 'prod'
+    - 'test'
+- name: conditionDeployBicep
+  type: boolean
+  default: true
+- name: sqlServerName
+  type: string
+  default: 'server'
+- name: TemplateFolder
+  type: string
+  default: 'microsoft.sql/config'
+
+stages:
+# Stage 1: Validate SQL Audit Template
+- stage: ValidateSQLAudit
+  displayName: Validate SQL Audit Template
+  variables:
+    _ResourceGroupName: '${{ parameters.sqlServerName }}-${{ upper(parameters.environment) }}'
+    vmImageNameValidate: 'windows-latest'
+  pool:
+    vmImage: $(vmImageNameValidate)
+  jobs:
+  - job: ValidateTemplate
+    displayName: 'Validate SQL Audit Template'
+    steps:
+      - script: az upgrade --yes
+        displayName: 'Upgrade Azure CLI'
+
+      - task: AzureCLI@2
+        displayName: Validate SQL Audit Template
+        inputs:
+          azureSubscription: 'Enterprise-DemandGeneration-SEA-DB-DEV'
+          scriptType: bash
+          workingDirectory: ${{ parametercs.TemplateFolder }}
+          scriptLocation: inlineScript
+          inlineScript: |
+            az deployment group validate \
+              --resource-group "${{ variables._ResourceGroupName }}" \
+              --template-file "./azure-sql-audit.bicep" \
+              --parameters "./${{ parameters.environment }}-azure-sql-audit.parameters.json"
+
+
+# Stage 2: Publish SQL Audit Artifacts
+- stage: PublishSQLAudit
+  displayName: Publish SQL Audit Artifacts
+  dependsOn:
+    - ValidateSQLAudit
+  jobs:
+  - job: PublishArtifacts
+    displayName: 'Publish SQL Audit Templates'
+    steps:
+      - task: CopyFiles@2
+        displayName: 'Copy Files to: $(build.artifactstagingdirectory)'
+        inputs:
+          SourceFolder: '$(build.SourcesDirectory)/${{ parameters.TemplateFolder }}'
+          Contents: |
+            **/*.json
+            **/*.bicep
+          TargetFolder: '$(build.artifactstagingdirectory)'
+          CleanTargetFolder: true
+
+      - task: PublishBuildArtifacts@1
+        displayName: 'Publish Artifact: sqlaudit'
+        inputs:
+          pathToPublish: $(build.artifactstagingdirectory)
+          artifactName: 'sqlaudit'
+          publishLocation: 'Container'
+
+# Stage 3: Deploy SQL Audit
+- stage: DeploySQLAudit
+  displayName: Deploy SQL Audit Logs
+  dependsOn:
+    - PublishSQLAudit
+  variables:
+    _ResourceGroupName: '${{ parameters.sqlServerName }}-${{ upper(parameters.environment) }}'
+  jobs:
+  - deployment: SQLAuditDeploy
+    displayName: Deploy SQL Audit Logs
+    environment: ${{ variables._ResourceGroupName }}
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+
+            - task: DownloadBuildArtifacts@0
+              displayName: 'Download SQL Audit Artifact'
+              inputs:
+                buildType: 'current'
+                downloadType: 'single'
+                artifactName: 'sqlaudit'
+                downloadPath: '$(System.ArtifactsDirectory)'
+
+            - task: AzureResourceManagerTemplateDeployment@3
+              displayName: 'Deploy SQL Audit Template'
+              name: BicepDeployment
+              inputs:
+                azureSubscription: ${{ parameters.subscriptionId }}
+                resourceGroupName: ${{ variables._ResourceGroupName }}
+                location: ${{ parameters.location }}
+                csmFile: '$(Pipeline.Workspace)/sqlaudit/azure-sql-audit.bicep'
+                csmParametersFile: '$(Pipeline.Workspace)/sqlaudit/${{ parameters.environment }}-azure-sql-audit.parameters.json'
+                deploymentOutputs: 'auditOutputs'
+
+            - task: Bash@3
+              displayName: Output SQL Audit Deployment
+              inputs:
+                targetType: inline
+                script: |
+                  echo "SQL Audit Deployment Outputs: $(auditOutputs)"

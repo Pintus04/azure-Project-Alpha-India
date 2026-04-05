@@ -1,0 +1,126 @@
+parameters:
+- name: location
+  type: string
+  default: 'centralindia'
+- name: subscriptionId
+  type: string
+  default: '0b3918b5-4679-4783-9724-f17bc3d199b8'
+- name: environment
+  type: string
+  default: 'dev'
+  values: 
+    - 'dev'
+    - 'uat'
+    - 'prod'
+    - 'test'
+- name: appName
+  type: string
+  default: 'Enterprise-DemandGeneration-SEA-DB'
+- name: TemplateFolder
+  type: string
+  default: 'azure-salesforce-login-scheduler'
+- name: EnableSchedulerDeployment
+  type: string
+  default: 'false'  # Set this to 'true' when you want to re-enable
+
+stages:
+# Stage for Validating the Logic App Scheduler Bicep Template
+- stage: ValidateSchedulerTemplate
+  displayName: Validate Scheduler Bicep Template
+  condition: and(succeeded(), eq(parameters.EnableSchedulerDeployment, 'true'))
+  variables:
+    _ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
+    vmImageNameValidate: 'ubuntu-latest'
+    resourceGroupName: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
+  pool:
+    vmImage: $(vmImageNameValidate)
+  jobs:
+  - job: ValidateBicepTemplate
+    displayName: 'Validate Scheduler Bicep Template'
+    steps:
+      - task: AzureCLI@2
+        enabled: true
+        displayName: 'Validate Scheduler Template'
+        condition: succeededOrFailed()
+        inputs:
+          azureSubscription: ${{ variables._ResourceGroupName }}
+          scriptType: bash
+          workingDirectory: ${{ parameters.TemplateFolder }}
+          scriptLocation: inlineScript
+          inlineScript: |
+            az deployment group validate \
+              --resource-group ${{ variables._ResourceGroupName }} \
+              --template-file jobScheduler.bicep \
+              --parameters ${{ parameters.environment }}-jobScheduler.parameters.json \
+              --verbose --debug
+
+# Stage for Publishing the Bicep Template as Artifacts
+- stage: PublishSchedulerTemplate
+  displayName: Publish Scheduler Bicep Template
+  dependsOn: ValidateSchedulerTemplate
+  condition: and(succeeded(), eq(parameters.EnableSchedulerDeployment, 'true'))
+  jobs:
+  - job: PublishArtifacts
+    displayName: 'Publish Scheduler Artifacts'
+    steps:
+    - task: CopyFiles@2
+      displayName: 'Copy Scheduler Files to Artifact Staging'
+      inputs:
+        SourceFolder: '$(build.SourcesDirectory)/${{ parameters.TemplateFolder }}'
+        Contents: |
+          **/*.json
+          **/*.bicep
+          **/*.bicepparam
+        TargetFolder: '$(build.artifactstagingdirectory)'
+        CleanTargetFolder: true
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifact: dropscheduler'
+      inputs:
+        pathToPublish: '$(build.artifactstagingdirectory)'
+        artifactName: 'dropscheduler'
+        publishLocation: 'Container'
+
+# Stage for Deploying the Logic App Scheduler Bicep Template
+- stage: DeploySchedulerTemplate
+  displayName: Deploy Scheduler Bicep Template
+  condition: and(succeeded(), eq(parameters.EnableSchedulerDeployment, 'true'))
+  variables:
+    _ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
+    vmImageNameDeploy: 'ubuntu-latest'
+  jobs:
+  - deployment: schedulerDeployment
+    displayName: 'Deploy Scheduler Bicep'
+    environment: ${{ variables._ResourceGroupName }}
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Scheduler Artifact'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'dropscheduler'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
+          - task: AzureResourceManagerTemplateDeployment@3
+            displayName: 'Deploy Scheduler Template to Resource Group'
+            name: SchedulerDeployment
+            inputs:
+              azureSubscription: ${{ parameters.subscriptionId }}
+              azureResourceManagerConnection: ${{ variables._ResourceGroupName }}
+              resourceGroupName: ${{ variables._ResourceGroupName }}
+              location: ${{ parameters.location }}
+              csmFile: '$(Pipeline.Workspace)/dropscheduler/jobScheduler.bicep'
+              csmParametersFile: '$(Pipeline.Workspace)/dropscheduler/${{ parameters.environment }}-jobScheduler.parameters.json'
+              deploymentOutputs: 'schedulerOutputs'
+
+          - task: Bash@3
+            displayName: 'Print Scheduler Deployment Outputs'
+            inputs:
+              targetType: inline
+              script: |
+                echo "Scheduler Output = $(schedulerOutputs)"

@@ -1,0 +1,66 @@
+parameters:
+- name: sqlServerName
+  type: string
+- name: databaseName
+  type: string
+- name: sqlAdminUser
+  type: string
+- name: sqlAdminPassword
+  type: string
+- name: readonlyUsername
+  type: string
+- name: readonlyPassword
+  type: string
+- name: subscriptionId
+  type: string
+
+stages:
+- stage: CreateReadOnlyUser
+  displayName: 'Create Read-Only SQL User'
+  jobs:
+  - job: createUser
+    displayName: 'Create Read-Only User in Azure SQL DB'
+    pool:
+      vmImage: 'windows-latest'
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Add Read-Only SQL User'
+      inputs:
+        azureSubscription: 'Enterprise-DemandGeneration-SEA-DB-UAT'
+        scriptType: pscore
+        scriptLocation: inlineScript
+        inlineScript: |
+          echo "Starting read-only user creation..."
+
+          # Step 1: Create LOGIN in master
+          sqlcmd -S tcp:${{ parameters.sqlServerName }},1433 `
+                -d master `
+                -U ${{ parameters.sqlAdminUser }} `
+                -P "${{ parameters.sqlAdminPassword }}" `
+                -Q "
+                  IF NOT EXISTS (SELECT * FROM sys.sql_logins WHERE name = N'${{ parameters.readonlyUsername }}')
+                  BEGIN
+                      CREATE LOGIN [${{ parameters.readonlyUsername }}] WITH PASSWORD = '${{ parameters.readonlyPassword }}';
+                  END
+                "
+
+          # Step 2: Create USER in the database and grant permissions
+          sqlcmd -S tcp:${{ parameters.sqlServerName }},1433 `
+                -d ${{ parameters.databaseName }} `
+                -U ${{ parameters.sqlAdminUser }} `
+                -P "${{ parameters.sqlAdminPassword }}" `
+                -Q "
+                  IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = N'${{ parameters.readonlyUsername }}')
+                  BEGIN
+                      CREATE USER [${{ parameters.readonlyUsername }}] FOR LOGIN [${{ parameters.readonlyUsername }}];
+                      EXEC sp_addrolemember 'db_datareader', '${{ parameters.readonlyUsername }}';
+                  END
+                "
+
+          echo ""
+          echo "✅ Read-only user created successfully!"
+          echo "------------------------------------------"
+          echo "👤 Username  : ${{ parameters.readonlyUsername }}"
+          echo "🔑 Password  : ${{ parameters.readonlyPassword }}"
+          echo "🔓 Permission: db_datareader (read-only)"
+          echo "------------------------------------------"

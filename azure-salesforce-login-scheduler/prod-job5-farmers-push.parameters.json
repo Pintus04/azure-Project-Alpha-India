@@ -1,0 +1,13 @@
+{
+  "parameters": {
+    "location": { "value": "centralindia" },
+    "logicAppName": { "value": "prod-sf-farmers-push" },
+    "recurrenceTimeZone": { "value": "India Standard Time" },
+    "recurrenceHour": { "value": 0 },
+    "recurrenceMinute": { "value": 30 },
+    "urlScheduler": {
+      "value": "https://prod-dotnet-connectpluscpbackend.azurewebsites.net/api/Salesforce/Vn/farmers/push"
+    }
+  }
+}
+

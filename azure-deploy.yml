@@ -1,0 +1,170 @@
+parameters:
+- name: appName
+  type: string  
+- name: subscriptionId
+  type: string
+- name: environment
+  type: string
+  default: dev
+  values:
+  - poc
+  - dev
+  - prod
+- name: TemplateFolder
+  type: string
+  default: 'mircrosoft.sql/config'
+- name: condition
+  default: true
+- name: location
+  type: string
+  default: 'East US'
+
+
+
+stages:
+- stage: ${{ parameters.environment }}
+  displayName: Deploy to ${{ upper(parameters.environment) }}
+  condition: ${{ parameters.condition }}
+  pool:
+    vmImage: 'windows-latest'
+    #vmImage: 'ubuntu-latest'
+  variables:
+    _EnvironmentUpper: ${{ upper(parameters.environment) }}
+    _ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
+
+  jobs:
+  - deployment: SqlDatabaseServer
+    displayName: "Deploy SqlDatabaseServer ARM"
+
+    environment: 'Enterprise-DemandGeneration-SEA-DB-DEV'  # or use _ResourceGroupName if you prefer
+
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download artifact'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'drop'
+              downloadPath: '$(System.ArtifactsDirectory)'
+          # - task: AzureCLI@2
+          #   displayName: 'Deploy Bicep file'
+          #   inputs:
+          #     azureSubscription: ${{ parameters.subscriptionId }}
+          #     scriptType: 'bash'
+          #     scriptLocation: 'inlineScript'
+          #     inlineScript: |
+          #       # # Creating a resource group
+          #       # az group create \
+          #       #   --name rg-bicep \
+          #       #   --location westus
+          #       # Deploying Bicep file
+          #       az deployment group create \
+          #         --name 'main' \
+          #         --resource-group ${{ variables._ResourceGroupName }} \
+          #         --template-file $(System.ArtifactsDirectory)/drop/azuredeploy.json \
+          #         --parameters @$(System.ArtifactsDirectory)/drop/azuredeploy.parameters.json \
+          #         --parameters location= ${{ parameters.location }}
+          - task: CmdLine@2
+            enabled: true
+            displayName: Checking parameters
+            inputs:
+             script: |
+              echo  '${{ parameters.subscriptionId }}'
+              echo  '${{ variables._ResourceGroupName }}'
+              echo  '${{ parameters.location }}'
+              echo  $(Agent.artifactstagingdirectory)\drop\azuredeploy.json
+              echo  $(Pipeline.Workspace)\drop\azuredeploy.json
+              echo  '$(Agent.artifactstagingdirectory)\drop\azuredeploy.json'
+              echo  '$(Pipeline.Workspace)\drop\azuredeploy.json'
+
+
+          # - task: AzureResourceManagerTemplateDeployment@3
+          #   displayName: 'SqlDatabaseServer Template deployment: Resource Group scope'
+          #   inputs:
+          #     azureSubscription: ${{ parameters.subscriptionId }}
+          #     azureResourceManagerConnection: ${{ variables._ResourceGroupName }}
+          #     resourceGroupName: ${{ variables._ResourceGroupName }}
+          #     location: ${{ parameters.location }}
+          #     csmFile: '$(Pipeline.Workspace)\drop\azuredeploy.json'
+          #     csmParametersFile: '$(Pipeline.Workspace)\drop\azuredeploy.parameters.json'
+
+          # - task: AzureResourceManagerTemplateDeployment@3
+          #   displayName: 'SqlDatabaseServer Template deployment: Resource Group scope'
+          #   inputs:
+          #     azureSubscription: ${{ parameters.azureServiceConnection }}
+          #     azureResourceManagerConnection: ${{ variables._ResourceGroupName }}
+          #     resourceGroupName: ${{ variables._ResourceGroupName }}
+          #     location: ${{ parameters.location }}
+          #     csmFile: '$(Agent.artifactstagingdirectory)\drop\azuredeploy.json'
+          #     csmParametersFile: '$(Agent.artifactstagingdirectory)\drop\azuredeploy.parameters.json'
+          # - task: SqlAzureDacpacDeployment@1
+          #   displayName: 'Deploy DACPAC to Azure SQL'
+          #   inputs:
+          #     azureSubscription: ${{ variables._ResourceGroupName }}
+          #     AuthenticationType: 'server'
+          #     ServerName: 'phazd1856sqlserver.database.windows.net'
+          #     DatabaseName: 'devsqldatabase'
+          #     SqlUsername: 'administratorLogin'
+          #     SqlPassword: 'Admin@8874'
+          #     DacpacFile: '$(Pipeline.Workspace)/drop/Enterprise-DemandGeneration-SEA-DB CI.dacpac'
+          #     #DeployType: 'DacpacTask'
+          #     #DeploymentAction: 'Publish'
+          #     #IpDetectionMethod: 'AutoDetect'
+          #     AllowIncompatiblePlatform=true
+          # - task: AzureCLI@2
+          #   displayName: 'Deploy DACPAC using SqlPackage'
+          #   inputs:
+          #    azureSubscription: ${{ variables._ResourceGroupName }}
+          #    scriptType: 'bash'
+          #    scriptLocation: 'inlineScript'
+          #    inlineScript: |
+          #     # Install sqlpackage if not already present
+          #     #curl -o sqlpackage.zip -L https://aka.ms/sqlpackage-linux
+          #     curl -o sqlpackage.zip -L https://aka.ms/sqlpackage-win
+          #     unzip sqlpackage.zip -d sqlpackage
+          #     chmod +x sqlpackage/sqlpackage
+
+          #     # Run sqlpackage with AllowIncompatiblePlatform flag
+          #     ./sqlpackage/sqlpackage \
+          #       /Action:Publish \
+          #       /SourceFile:"$(Pipeline.Workspace)/drop/Enterprise-DemandGeneration-SEA-DB CI.dacpac" \
+          #       /TargetServerName:"phazd1856sqlserver.database.windows.net" \
+          #       /TargetDatabaseName:"devsqldatabase" \
+          #       /TargetUser:"administratorLogin" \
+          #       /TargetPassword:"Admin@8874" \
+          #       /p:AllowIncompatiblePlatform=true
+          # - task: AzureCLI@2
+          #   displayName: 'Deploy DACPAC using SqlPackage'
+          #   inputs:
+          #    azureSubscription: ${{ variables._ResourceGroupName }}
+          #    scriptType: 'ps'
+          #    scriptLocation: 'inlineScript'
+          #    inlineScript: |
+          #     Expand-Archive -Path sqlpackage.zip -DestinationPath sqlpackage
+          #     & "sqlpackage\sqlpackage.exe" /Action:Publish `
+          #     /SourceFile:"$(Pipeline.Workspace)\drop\DataBaseScript_ConnectPlus.sql" `
+          #     /TargetServerName:"phazd1856sqlserver.database.windows.net" `
+          #     /TargetDatabaseName:"devsqldatabase" `
+          #     /TargetUser:"administratorLogin" `
+          #     /TargetPassword:"Admin@8874" `
+          #     /p:AllowIncompatiblePlatform=true
+          - task: PowerShell@2
+            displayName: 'Clean SQL Script and Deploy'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $sqlFile = "$(Pipeline.Workspace)\drop\ConnectPlus_DatabaseScript.sql"
+                $cleanedSql = Get-Content $sqlFile | Where-Object { $_ -notmatch '^\s*USE\s' }
+                $cleanedSql | Set-Content $sqlFile
+
+                Write-Host "Cleaned SQL script. Now executing..."
+                Invoke-Sqlcmd `
+                  -InputFile $sqlFile `
+                  -ServerInstance "phazd1856sqlserver.database.windows.net" `
+                  -Database "devsqldatabase" `
+                  -Username "administratorLogin" `
+                  -Password "Admin@8874"

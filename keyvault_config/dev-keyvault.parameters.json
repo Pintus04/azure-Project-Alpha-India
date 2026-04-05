@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "keyVaultName": {
+      "value": "connectplus-kv-cp-dev"
+    },
+    "location": {
+      "value": "centralindia"
+    },
+    "principalId": {
+      "value": "e6733786-d2d7-420f-a08d-50b327069faa"
+    }
+  }
+}

@@ -1,0 +1,224 @@
+parameters:
+- name: location
+  type: string
+  default: 'centralindia'
+
+- name: subscriptionId
+  type: string
+  default: 'ac4ac193-b173-4d5f-92af-6739adc86f5f'   # ✅ your real subscription ID
+
+- name: environment
+  type: string
+  default: 'prod'
+  values:
+    - 'dev'
+    - 'uat'
+    - 'prod'
+    - 'test'
+
+- name: appName
+  type: string
+  default: 'Enterprise-DemandGeneration-SEA-DB'
+
+- name: TemplateFolder
+  type: string
+  default: 'azure-salesforce-login-scheduler'
+
+# List of scheduler parameter files for each Salesforce job
+- name: schedulerJobs
+  type: object
+  default:
+    - name: distributors-sync
+      file: 'prod-job1-distributors.parameters.json'
+    - name: retailers-sync
+      file: 'prod-job2-retailers-sync.parameters.json'
+    - name: farmers-sync
+      file: 'prod-job3-farmers-sync.parameters.json'
+    - name: retailers-push
+      file: 'prod-job4-retailers-push.parameters.json'
+    - name: farmers-push
+      file: 'prod-job5-farmers-push.parameters.json'
+    - name: cropAcreage-push
+      file: 'prod-job6-cropAcreage-push.parameters.json'
+    - name: send-fas-sqlServerName
+      file: 'prod-job7-sendFAS-SMS.parameters.json'
+
+# -------------------
+# Stage 1: Validate Scheduler Templates
+# -------------------
+stages:
+- stage: ValidateSchedulerTemplate
+  displayName: "Validate All Scheduler Templates"
+  variables:
+    _ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
+  pool:
+    vmImage: ubuntu-latest
+
+  jobs:
+  - job: ValidateAllSchedulers
+    displayName: "Validate Scheduler Bicep Templates"
+    steps:
+      - checkout: self
+
+      # Validate each scheduler job template
+      - ${{ each job in parameters.schedulerJobs }}:
+        - task: AzureCLI@2
+          displayName: ${{ format('Validate Logic App - {0}', job.name) }}
+          inputs:
+            azureSubscription: 'Enterprise-DemandGeneration-SEA-DB-PROD'   # ✅ your actual Azure DevOps Service Connection Name
+            scriptType: bash
+            workingDirectory: ${{ parameters.TemplateFolder }}
+            scriptLocation: inlineScript
+            inlineScript: |
+              echo "🔍 Validating scheduler template for $(job_name) ..."
+              az deployment group validate \
+                --resource-group $(resource_group) \
+                --template-file jobScheduler.bicep \
+                --parameters $(job_file) \
+                --verbose
+              echo "✅ Validation successful for $(job_name)"
+          env:
+            job_name: ${{ job.name }}
+            job_file: ${{ job.file }}
+            resource_group: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
+
+
+# -------------------
+# Stage 2: Publish Scheduler Artifacts
+# -------------------
+- stage: PublishSchedulerTemplate
+  displayName: "Publish Scheduler Bicep Template"
+  dependsOn: ValidateSchedulerTemplate
+  jobs:
+  - job: PublishArtifacts
+    displayName: "Publish Scheduler Artifacts"
+    steps:
+      - task: CopyFiles@2
+        displayName: "Copy Scheduler Files to Artifact Staging"
+        inputs:
+          SourceFolder: '$(Build.SourcesDirectory)/${{ parameters.TemplateFolder }}'
+          Contents: |
+            **/*.json
+            **/*.bicep
+          TargetFolder: '$(Build.ArtifactStagingDirectory)'
+          CleanTargetFolder: true
+
+      - task: PublishBuildArtifacts@1
+        displayName: "Publish Artifact: dropscheduler"
+        inputs:
+          pathToPublish: '$(Build.ArtifactStagingDirectory)'
+          artifactName: 'dropscheduler'
+          publishLocation: 'Container'
+
+
+# -------------------
+# Stage 3: Deploy All Logic App Schedulers
+# -------------------
+- stage: DeployAllSalesforceSchedulers
+  displayName: "Deploy All Salesforce Logic App Schedulers"
+  dependsOn: PublishSchedulerTemplate
+  variables:
+    _ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
+  pool:
+    vmImage: ubuntu-latest
+
+  jobs:
+  - deployment: DeploySchedulers
+    displayName: "Deploy All Salesforce Scheduler Jobs"
+    environment: ${{ variables._ResourceGroupName }}
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+
+            - task: DownloadBuildArtifacts@0
+              displayName: "Download Scheduler Artifact"
+              inputs:
+                buildType: 'current'
+                downloadType: 'single'
+                artifactName: 'dropscheduler'
+                downloadPath: '$(System.ArtifactsDirectory)'
+
+            # -----------------------
+            #  FIXED — USING ConnectedServiceName
+            # -----------------------
+
+            # - task: AzureResourceManagerTemplateDeployment@3
+            #   displayName: "Deploy distributors-sync"
+            #   inputs:
+            #     ConnectedServiceName: 'Enterprise-DemandGeneration-SEA-DB-PROD'
+            #     resourceGroupName: ${{ variables._ResourceGroupName }}
+            #     location: ${{ parameters.location }}
+            #     csmFile: '$(Pipeline.Workspace)/dropscheduler/jobScheduler.bicep'
+            #     csmParametersFile: '$(Pipeline.Workspace)/dropscheduler/prod-job1-distributors.parameters.json'
+            #     deploymentMode: Incremental
+
+            # - task: AzureResourceManagerTemplateDeployment@3
+            #   displayName: "Deploy retailers-sync"
+            #   inputs:
+            #     ConnectedServiceName: 'Enterprise-DemandGeneration-SEA-DB-PROD'
+            #     resourceGroupName: ${{ variables._ResourceGroupName }}
+            #     location: ${{ parameters.location }}
+            #     csmFile: '$(Pipeline.Workspace)/dropscheduler/jobScheduler.bicep'
+            #     csmParametersFile: '$(Pipeline.Workspace)/dropscheduler/prod-job2-retailers-sync.parameters.json'
+            #     deploymentMode: Incremental
+
+            # - task: AzureResourceManagerTemplateDeployment@3
+            #   displayName: "Deploy farmers-sync"
+            #   inputs:
+            #     ConnectedServiceName: 'Enterprise-DemandGeneration-SEA-DB-PROD'
+            #     resourceGroupName: ${{ variables._ResourceGroupName }}
+            #     location: ${{ parameters.location }}
+            #     csmFile: '$(Pipeline.Workspace)/dropscheduler/jobScheduler.bicep'
+            #     csmParametersFile: '$(Pipeline.Workspace)/dropscheduler/prod-job3-farmers-sync.parameters.json'
+            #     deploymentMode: Incremental
+
+            # - task: AzureResourceManagerTemplateDeployment@3
+            #   displayName: "Deploy retailers-push"
+            #   inputs:
+            #     ConnectedServiceName: 'Enterprise-DemandGeneration-SEA-DB-PROD'
+            #     resourceGroupName: ${{ variables._ResourceGroupName }}
+            #     location: ${{ parameters.location }}
+            #     csmFile: '$(Pipeline.Workspace)/dropscheduler/jobScheduler.bicep'
+            #     csmParametersFile: '$(Pipeline.Workspace)/dropscheduler/prod-job4-retailers-push.parameters.json'
+            #     deploymentMode: Incremental
+
+            # - task: AzureResourceManagerTemplateDeployment@3
+            #   displayName: "Deploy farmers-push"
+            #   inputs:
+            #     ConnectedServiceName: 'Enterprise-DemandGeneration-SEA-DB-PROD'
+            #     resourceGroupName: ${{ variables._ResourceGroupName }}
+            #     location: ${{ parameters.location }}
+            #     csmFile: '$(Pipeline.Workspace)/dropscheduler/jobScheduler.bicep'
+            #     csmParametersFile: '$(Pipeline.Workspace)/dropscheduler/prod-job5-farmers-push.parameters.json'
+            #     deploymentMode: Incremental
+
+            # - task: AzureResourceManagerTemplateDeployment@3
+            #   displayName: "Deploy cropAcreage-push"
+            #   inputs:
+            #     ConnectedServiceName: 'Enterprise-DemandGeneration-SEA-DB-PROD'
+            #     resourceGroupName: ${{ variables._ResourceGroupName }}
+            #     location: ${{ parameters.location }}
+            #     csmFile: '$(Pipeline.Workspace)/dropscheduler/jobScheduler.bicep'
+            #     csmParametersFile: '$(Pipeline.Workspace)/dropscheduler/prod-job6-cropAcreage-push.parameters.json'
+            #     deploymentMode: Incremental
+
+            - task: AzureResourceManagerTemplateDeployment@3
+              displayName: "Deploy Logic App - send-fas-sms"
+              inputs:
+                ConnectedServiceName: 'Enterprise-DemandGeneration-SEA-DB-PROD'
+                resourceGroupName: ${{ variables._ResourceGroupName }}
+                location: ${{ parameters.location }}
+                csmFile: '$(Pipeline.Workspace)/dropscheduler/jobScheduler.bicep'
+                csmParametersFile: '$(Pipeline.Workspace)/dropscheduler/prod-job7-sendFAS-SMS.parameters.json'
+                deploymentMode: Incremental
+
+
+
+            - task: Bash@3
+              displayName: "Confirm Scheduler Deployment"
+              inputs:
+                targetType: inline
+                script: |
+                  echo "All Salesforce schedulers deployed successfully."

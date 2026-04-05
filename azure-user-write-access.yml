@@ -1,0 +1,67 @@
+parameters:
+- name: sqlServerName
+  type: string
+- name: databaseName
+  type: string
+- name: sqlAdminUser
+  type: string
+- name: sqlAdminPassword
+  type: string
+- name: writeUsername
+  type: string
+- name: writePassword
+  type: string
+- name: subscriptionId
+  type: string
+
+stages:
+- stage: CreateWriteUser
+  displayName: 'Create Write-Access SQL User'
+  jobs:
+  - job: createUser
+    displayName: 'Create Write-Access User in Azure SQL DB'
+    pool:
+      vmImage: 'windows-latest'
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Add Write-Access SQL User'
+      inputs:
+        azureSubscription: 'Enterprise-DemandGeneration-SEA-DB-UAT'
+        scriptType: pscore
+        scriptLocation: inlineScript
+        inlineScript: |
+          echo "Starting write-access user creation..."
+
+          # Step 1: Create LOGIN in master
+          sqlcmd -S tcp:${{ parameters.sqlServerName }},1433 `
+                -d master `
+                -U ${{ parameters.sqlAdminUser }} `
+                -P "${{ parameters.sqlAdminPassword }}" `
+                -Q "
+                  IF NOT EXISTS (SELECT * FROM sys.sql_logins WHERE name = N'${{ parameters.writeUsername }}')
+                  BEGIN
+                      CREATE LOGIN [${{ parameters.writeUsername }}] WITH PASSWORD = '${{ parameters.writePassword }}';
+                  END
+                "
+
+          # Step 2: Create USER in the database and grant read-write permissions
+          sqlcmd -S tcp:${{ parameters.sqlServerName }},1433 `
+                -d ${{ parameters.databaseName }} `
+                -U ${{ parameters.sqlAdminUser }} `
+                -P "${{ parameters.sqlAdminPassword }}" `
+                -Q "
+                  IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = N'${{ parameters.writeUsername }}')
+                  BEGIN
+                      CREATE USER [${{ parameters.writeUsername }}] FOR LOGIN [${{ parameters.writeUsername }}];
+                      EXEC sp_addrolemember 'db_datareader', '${{ parameters.writeUsername }}';
+                      EXEC sp_addrolemember 'db_datawriter', '${{ parameters.writeUsername }}';
+                  END
+                "
+
+          echo ""
+          echo "✅ Write-access user created successfully!"
+          echo "------------------------------------------"
+          echo "👤 Username  : ${{ parameters.writeUsername }}"
+          echo "🔑 Password  : ${{ parameters.writePassword }}"
+          echo "🔓 Permission: db_datareader + db_datawriter (read/write)"
+          echo "------------------------------------------"

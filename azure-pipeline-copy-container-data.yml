@@ -1,0 +1,79 @@
+parameters:
+- name: appName
+  type: string
+- name: environment
+  type: string
+- name: sourceUrl
+  type: string
+- name: destUrl
+  type: string
+- name: dryRun
+  type: boolean
+  default: false
+
+stages:
+- stage: CopyBlob_${{ parameters.environment }}
+  displayName: Copy Blob PROD → CP_TEST
+
+  jobs:
+  - job: CopyData
+    displayName: Copy Container Data
+
+    pool:
+      vmImage: ubuntu-latest
+
+    steps:
+
+    # Install AzCopy in the pipeline agent
+    - task: AzureCLI@2
+      displayName: Install AzCopy
+      inputs:
+        azureSubscription: ${{ parameters.appName }}-${{ parameters.environment }}
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          curl -sL https://aka.ms/downloadazcopy-v10-linux | tar -xz
+          sudo cp ./azcopy_linux_amd64_*/azcopy /usr/bin/
+
+    # Copy Data from PROD to TEST using AzCopy
+    - task: AzureCLI@2
+      displayName: Copy Data PROD → CP_TEST
+      inputs:
+        azureSubscription: ${{ parameters.appName }}-${{ parameters.environment }}
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          echo "Starting COPY..."
+
+          CMD="azcopy copy '${{ parameters.sourceUrl }}' '${{ parameters.destUrl }}' --recursive=true --overwrite=ifSourceNewer --log-level=INFO"
+
+          if [ "${{ parameters.dryRun }}" = "true" ]; then
+            CMD="$CMD --dry-run"
+          fi
+
+          eval $CMD
+
+          echo "Copy Completed"
+
+    # List files in destination container to verify
+    - task: AzureCLI@2
+      displayName: List Files in TEST Container
+      inputs:
+        azureSubscription: ${{ parameters.appName }}-${{ parameters.environment }}
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          echo "======================================"
+          echo "Listing files in TEST container"
+          echo "======================================"
+
+          az storage blob list \
+            --account-name testconnectplusfs \
+            --container-name testconnectplusfile \
+            --sas-token "$(echo '${{ parameters.destUrl }}' | cut -d'?' -f2)" \
+            --output table
+
+          echo "======================================"
+          echo "File listing completed"

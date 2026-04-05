@@ -1,0 +1,101 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+ 
+parameters:
+- name: TemplateFolder
+  type: string
+- name: appName
+  type: string  
+- name: subscriptionId
+  type: string
+- name: environment
+  type: string
+  default: 'dev'
+- name: condition
+  default: true
+- name: location
+  type: string
+  default: resourceGroup().location 
+
+ 
+ 
+stages:
+- stage: ValidateTemplate
+  displayName: Validate templates for ${{ upper(parameters.environment) }}
+  condition: ${{ parameters.condition }}
+  variables:
+    - name: _ResourceGroupName
+      value: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
+  pool:
+    vmImage: windows-2022
+
+  jobs:
+  - job: ValidateTemplate
+    displayName: 'Validate template'
+    steps:
+      - task: AzureCLI@2
+        enabled: true
+        displayName: Validate Template
+        condition: succeededOrFailed()
+        inputs:
+          azureSubscription: ${{ variables['_ResourceGroupName'] }}
+          scriptType: pscore
+          workingDirectory: ${{ parameters.TemplateFolder }}
+          scriptLocation: inlineScript
+          inlineScript: |
+            az deployment group validate --verbose `
+              --resource-group ${{ variables['_ResourceGroupName'] }} `
+              --template-file .\azuredeploy.json `
+              --parameters .\azuredeploy.parameters.json
+ 
+      - task: AzureCLI@2
+        enabled: true
+        displayName: What-If Output
+        # We need this succeededOrFailed() to run even if an earlier step/stage fails
+        condition: succeededOrFailed()
+        inputs:
+          azureSubscription: ${{ variables['_ResourceGroupName'] }}
+          scriptType: pscore
+          workingDirectory: ${{ parameters.TemplateFolder }}
+          scriptLocation: inlineScript
+          inlineScript: |
+            az deployment group what-if --verbose `
+              --resource-group ${{ variables['_ResourceGroupName'] }} `
+              --template-file .\azuredeploy.json `
+              --parameters .\azuredeploy.parameters.json
+ 
+- stage: PublishTemplate
+  displayName: Publish templates
+  dependsOn:
+  - ValidateTemplate
+  jobs:
+  - job: PublishArtifactsIfNoFailures
+    displayName: 'Publish artifacts'
+    steps:
+    - task: CopyFiles@2
+      displayName: 'Copy Files to: $(build.artifactstagingdirectory)'
+      inputs:
+        SourceFolder: '$(build.SourcesDirectory)/${{ parameters.TemplateFolder }}'
+        Contents: |
+              **/*.json
+              **/*.bicep
+              **/*.bicepparam
+              **/*.dacpac
+        TargetFolder: '$(build.artifactstagingdirectory)'
+        CleanTargetFolder: true
+    - task: CopyFiles@2
+      displayName: 'Copy Files to: $(build.artifactstagingdirectory)'
+      inputs:
+        SourceFolder: '$(build.SourcesDirectory)'
+        Contents: |
+              *.sql
+        TargetFolder: '$(build.artifactstagingdirectory)'
+        CleanTargetFolder: true
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifact: drop'
+      inputs:
+        pathToPublish: $(build.artifactstagingdirectory)
+        artifactName: 'drop'
+        publishLocation: 'Container'

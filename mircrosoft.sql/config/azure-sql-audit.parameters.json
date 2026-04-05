@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "serverName": {
+      "value": "phazd1856sqlserver"
+    },
+    "databaseName": {
+      "value": "devsqldatabase"
+    },
+    "storageAccountResourceId": {
+      "value": "/subscriptions/0b3918b5-4679-4783-9724-f17bc3d199b8/resourceGroups/Enterprise-DemandGeneration-SEA-DB-DEV/providers/Microsoft.Storage/storageAccounts/phazd1856sasqlempover"
+    },
+    "retentionDays": {
+      "value": 90
+    }
+  }
+}

@@ -1,0 +1,209 @@
+# DISABLE AUTOMATIC DEPLOYMENT OF SCHEDULER
+trigger: none
+pr: none
+
+parameters:
+- name: TemplateFolder
+  type: string
+  default: 'mircrosoft.sql/config'
+- name: dotnetTemplateFolder
+  type: string
+  default: 'webapp_config/Config'
+- name: location
+  type: string
+  #default: resourceGroup().location 
+  default: 'centralindia'
+- name: appName
+  type: string
+  default: 'Enterprise-DemandGeneration-SEA-DB-CP'
+- name: webAppName
+  type: string
+  default: 'dotnet-connectpluscpbackend'
+- name: subscriptionId
+  type: string
+  default: '0b3918b5-4679-4783-9724-f17bc3d199b8'
+- name: environment
+  type: string
+  default: 'dev'
+  values:
+    - 'dev'
+    - 'uat'
+    - 'prod'
+    - 'test'
+# - name: condition
+#   default: true
+- name: EnableSchedulerDeployment
+  type: string
+  #default: 'false'  # Change to 'true' when you want to re-enable scheduler deployment
+  default: 'true'
+
+pool:
+  vmImage: windows-latest
+
+stages:
+#  - template: azure-pipeline-database-creation.yml
+#    parameters:
+#      appName: ${{ parameters.appName }}
+#      subscriptionId: ${{ parameters.subscriptionId }}
+#      environment: ${{ parameters.environment }}
+#      TemplateFolder:  ${{ parameters.TemplateFolder }}
+#     condition: succeeded()
+
+# Build and Deploy .NET backend Service to app
+#  - template: azure-backendapp.yml
+#    parameters:
+#       webAppName: ${{ parameters.appName }}
+#       appServiceName: ${{ parameters.webAppName }}
+#       subscriptionId: ${{ parameters.subscriptionId }}
+#       environment: ${{ parameters.environment }}
+#       TemplateFolder:  ${{ parameters.dotnetTemplateFolder }}
+
+# Deploy the Key Vault using Biecp template 
+#  - template: azure-pipeline-keyvault.yml
+#    parameters:
+#       azureServiceConnection: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
+#       location: ${{ parameters.location }}
+#       resourceGroupName: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
+#       webAppName: '${{ parameters.environment }}-${{ parameters.webAppName }}'
+#       keyVaultName: ${{ format('connectplus-kv-cp-{0}', parameters.environment) }}
+
+# Deploy the Key Vault secrets using Bicep template
+- template: azure-pipeline-keyvault-secrets.yml
+  parameters:
+    azureServiceConnection: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
+    resourceGroupName: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
+    keyVaultName: ${{ format('connectplus-kv-cp-{0}', parameters.environment) }}
+
+
+# # ### Deploy the scheduler logicApp for salesforce 
+# - template: azure-scheduler-deploy.yml
+#   parameters:
+#     appName: ${{ parameters.appName }}
+#     subscriptionId: ${{ parameters.subscriptionId }}
+#     #environment: ${{ parameters.environment }}
+#     environment: 'prod' 
+#     TemplateFolder: 'azure-salesforce-login-scheduler'
+#     location: ${{ parameters.location }}
+
+# # -------------------------
+# # Logic App Scheduler Deployment (controlled)
+# # -------------------------
+#   - ${{ if eq(parameters.EnableSchedulerDeployment, 'true') }}:
+#     - template: azure-scheduler-deploy.yml
+#       parameters:
+#         appName: ${{ parameters.appName }}
+#         subscriptionId: ${{ parameters.subscriptionId }}
+#         environment: ${{ parameters.environment }}
+#         TemplateFolder: 'azure-salesforce-login-scheduler'
+#         location: ${{ parameters.location }}
+
+# ##  Deploy sql audit logs
+#  - template: azure-pipeline-sql-audit.yml
+#    parameters:
+#       appName: ${{ parameters.appName }}
+#       subscriptionId: ${{ parameters.subscriptionId }}
+#       environment: ${{ parameters.environment }}
+#       TemplateFolder: ${{ parameters.TemplateFolder }}
+#       location: ${{ parameters.location }}
+#       storageAccountResourceId: '/subscriptions/0b3918b5-4679-4783-9724-f17bc3d199b8/resourceGroups/Enterprise-DemandGeneration-SEA-DB-DEV/providers/Microsoft.Storage/storageAccounts/phazd1856sasqlempover'
+
+
+
+# # ### Delete the scheduler logicApp for salesforce 
+# - template: azure-scheduler-delete.yml
+#   parameters:
+#     appName: ${{ parameters.appName }}
+#     subscriptionId: ${{ parameters.subscriptionId }}
+#     environment: ${{ parameters.environment }}
+#     location: ${{ parameters.location }}
+#     logicAppName: 'sf-login-scheduler'
+
+# # Build and Deploy Storage Account
+#  - template: azure-pipeline-storagedeployment.yml
+#    parameters:
+#      webAppName: ${{ parameters.appName }}
+#      appServiceName: ${{ parameters.webAppName }}
+#      subscriptionId: ${{ parameters.subscriptionId }}
+#      environment: ${{ parameters.environment }}
+#      TemplateFolder:  ${{ parameters.TemplateFolder }}
+
+
+# # Generate SAS token for Storage Account
+#  - template: azure-pipeline-storage-sas.yml
+#    parameters:
+#       appName: ${{ parameters.appName }}
+#       subscriptionId: '0b3918b5-4679-4783-9724-f17bc3d199b8'
+#       environment: 'test'
+#       location: ${{ parameters.location }}
+#       storageAccountName: 'testconnectplusfs'
+#       containerName: 'testconnectplusfile'
+#       permissions: 'racwl'
+
+
+# Copy data from source to destination blob container
+#  - template: azure-pipeline-copy-container-data.yml
+#    parameters:
+#     appName: ${{ parameters.appName }}
+#     environment: 'test'
+#     sourceUrl: "https://prodconnectplusfs.blob.core.windows.net/prodconnectplusfile?se=2026-12-31T00%3A00%3A00Z&sp=rl&spr=https&sv=2026-02-06&sr=c&sig=3BF4giAPx1RSZYbTNFNMILvCh1Ebe0uvJnor1c7uQIA%3D"
+#     destUrl: "https://testconnectplusfs.blob.core.windows.net/testconnectplusfile?se=2026-12-31T00%3A00%3A00Z&sp=racwl&spr=https&sv=2026-02-06&sr=c&sig=k9NS%2BZ/Gunr4elu8zntrdNrqCmFtNk0pfQYeUaP7dRA%3D"
+
+
+# # # Build and Deploy .NET backend Service to app
+#  - template: azure-pipeline-storageaccesstoken.yml
+#    parameters:
+#      webAppName: ${{ parameters.appName }}
+#      appServiceName: ${{ parameters.webAppName }}
+#      subscriptionId: ${{ parameters.subscriptionId }}
+#      environment: ${{ parameters.environment }}
+#      TemplateFolder:  ${{ parameters.TemplateFolder }}
+
+##  Delete App Services
+# - template: azure-delete.yml
+#   parameters:
+#     webAppName: ${{ parameters.appName }}
+#     appServiceName: ${{ parameters.webAppName }}
+#     subscriptionId: ${{ parameters.subscriptionId }}
+#     environment: ${{ parameters.environment }}
+#     TemplateFolder:  ${{ parameters.TemplateFolder }}
+
+# #  firewall access
+#  - template: azure-firewall.yml
+#    parameters:
+#       webAppName: ${{ parameters.appName }}
+#       appServiceName: ${{ parameters.webAppName }}
+#       subscriptionId: ${{ parameters.subscriptionId }}
+#       environment: ${{ parameters.environment }}
+#       TemplateFolder:  ${{ parameters.TemplateFolder }}
+
+
+# # # Create Read-Only SQL User
+#  - template: azure-user-read-access.yml
+#    parameters:
+#      sqlServerName: 'prod-connectplussqlserver.database.windows.net'
+#      databaseName: 'prod-connectplusdatabase'
+#      sqlAdminUser: 'administratorLogin'
+#      sqlAdminPassword: 'Admin@8874'
+#      readonlyUsername: 'readadminuser'
+#      readonlyPassword: 'ReadAdmin@2025#'
+#      subscriptionId: ${{ parameters.subscriptionId }}
+
+# # # # Create Write-Access SQL User
+# - template: azure-user-write-access.yml
+#   parameters:
+#     sqlServerName: 'prod-connectplussqlserver.database.windows.net'
+#     databaseName: 'prod-connectplusdatabase'
+#     sqlAdminUser: 'administratorLogin'
+#     sqlAdminPassword: 'Admin@8874'
+#     writeUsername: 'writeadminuser'
+#     writePassword: 'WriteAdmin@2025#'
+#     subscriptionId: ${{ parameters.subscriptionId }}
+
+### Get SKU Service
+# - template: azure-getSKU.yml
+#   parameters:
+#     webAppName: ${{ parameters.appName }}
+#     appServiceName: ${{ parameters.webAppName }}
+#     subscriptionId: ${{ parameters.subscriptionId }}
+#     environment: ${{ parameters.environment }}
+#     TemplateFolder:  ${{ parameters.TemplateFolder }}

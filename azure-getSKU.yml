@@ -1,0 +1,51 @@
+parameters:
+- name: location
+  type: string
+  default: 'centralindia'
+- name: subscriptionId
+  type: string
+  default: '75bf482e-ac2b-4bb8-b8af-b9d2f3833947'
+- name: environment
+  type: string
+  default: 'dev'
+- name: conditiondeploybicep
+  type: boolean
+  default: true
+- name: webAppName
+  type: string
+  default: 'Enterprise-DemandGeneration-SEA-DB-PROD'
+- name: appServiceName
+  type: string
+  default: 'pro-connectpluscpbackend'
+- name: TemplateFolder
+  type: string
+  default: 'microsoft.sql/config'
+
+
+stages:
+# Stage for Validating template of Bicep
+- stage: GetSKU
+  displayName: 'GetSKUServices'
+  variables:
+    _ResourceGroupName: '${{ parameters.webAppName }}-${{ upper(parameters.environment) }}'
+    vmImageNameVaidate: 'windows-latest'
+    vmImageName: 'windows-latest'
+    resourceGroupName: ${{ parameters.webAppName }}-${{ upper(parameters.environment) }}
+    environmentName: ${{ parameters.webAppName }}-${{ upper(parameters.environment) }}
+  pool:
+      vmImage: $(vmImageNameVaidate)
+  jobs:
+  - job: GetSKUService
+    displayName: 'Get SKU for SQL Server'
+    steps:
+      - task: AzureCLI@2
+        enabled: true
+        displayName: Delete command
+        inputs:
+          azureSubscription: ${{ variables['_ResourceGroupName'] }}
+          scriptType: pscore
+          workingDirectory: ${{ parameters.TemplateFolder }}
+          scriptLocation: inlineScript
+          inlineScript: |
+              az sql db list-editions --location "${{ parameters.location }}" --output table `
+              --debug

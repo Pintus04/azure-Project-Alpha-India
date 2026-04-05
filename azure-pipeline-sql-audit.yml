@@ -1,0 +1,39 @@
+parameters:
+- name: location
+  type: string
+- name: subscriptionId
+  type: string
+- name: environment
+  type: string
+- name: appName
+  type: string
+- name: TemplateFolder
+  type: string
+  default: 'microsoft.sql/config'
+- name: storageAccountResourceId
+  type: string
+
+stages:
+- stage: DeploySqlAudit
+  displayName: "Enable SQL Server Audit"
+  jobs:
+  - deployment: sqlAudit
+    displayName: Deploy SQL Audit Template
+    environment: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - task: AzureResourceManagerTemplateDeployment@3
+            displayName: 'Deploy SQL Audit Settings'
+            inputs:
+              azureSubscription: 'Enterprise-DemandGeneration-SEA-DB'
+              resourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
+              location: ${{ parameters.location }}
+              csmFile: '${{ parameters.TemplateFolder }}/azure-sql-audit.bicep'
+              csmParametersFile: '${{ parameters.TemplateFolder }}/azure-sql-audit.parameters.json'
+              overrideParameters: >
+                -serverName ${{ parameters.appName }}-sqlserver
+                -databaseName ${{ parameters.appName }}-db
+                -storageAccountResourceId ${{ parameters.storageAccountResourceId }}

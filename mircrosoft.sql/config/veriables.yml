@@ -1,0 +1,10 @@
+## veriables yml files
+variables:
+- name: appName
+  value: 'Enterprise-DemandGeneration-SEA-DB'
+- name: subscriptionId
+  value: '0b3918b5-4679-4783-9724-f17bc3d199b8'
+- name: environment
+  value: 'dev'
+- name: condition
+  value: true

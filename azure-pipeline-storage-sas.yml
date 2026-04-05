@@ -1,0 +1,52 @@
+# Azure Pipeline Template to Generate SAS Token for Storage Account Container
+parameters:
+- name: appName
+  type: string
+- name: subscriptionId
+  type: string
+- name: environment
+  type: string
+- name: location
+  type: string
+- name: storageAccountName
+  type: string
+- name: containerName
+  type: string
+- name: permissions
+  type: string
+  default: 'rl'
+
+stages:
+- stage: GenerateSAS_${{ parameters.environment }}
+  displayName: Generate SAS - ${{ parameters.environment }}
+
+  jobs:
+  - job: GenerateSAS
+    pool:
+      vmImage: ubuntu-latest
+
+    steps:
+    - task: AzureCLI@2
+      displayName: Generate SAS Token
+      inputs:
+        azureSubscription: ${{ parameters.appName }}-${{ parameters.environment }}
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          echo "Generating SAS..."
+
+          az account set --subscription "${{ parameters.subscriptionId }}"
+
+          SAS=$(az storage container generate-sas \
+            --account-name ${{ parameters.storageAccountName }} \
+            --name ${{ parameters.containerName }} \
+            --permissions ${{ parameters.permissions }} \
+            --expiry 2026-12-31T00:00:00Z \
+            --https-only \
+            --output tsv)
+
+          echo "================================="
+          echo "COPY THIS SAS "
+          echo "?$SAS"
+          echo "================================="

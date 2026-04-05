@@ -1,0 +1,69 @@
+parameters:
+- name: location
+  type: string
+  default: 'centralindia'
+- name: subscriptionId
+  type: string
+  default: '0b3918b5-4679-4783-9724-f17bc3d199b8'
+- name: environment
+  type: string
+  default: 'dev'
+  values:
+    - 'dev'
+    - 'uat'
+    - 'prod'
+    - 'test'
+- name: conditiondeploybicep
+  type: boolean
+  default: true
+- name: webAppName
+  type: string
+  default: 'Enterprise-DemandGeneration-SEA-DB-CP'
+- name: appServiceName
+  type: string
+  default: 'dotnet-connectpluscpbackend'
+- name: TemplateFolder
+  type: string
+  default: 'microsoft.sql/config'
+- name: storageAccountName 
+  type: string
+  default: 'connectplusfs'
+- name: containerName
+  type: string
+  default: 'connectplusfile'
+
+stages:
+# Stage for Validating template of Bicep  
+- stage: GenerateAccessToken
+  displayName: Generate Access Token
+  variables:
+    _ResourceGroupName: '${{ parameters.webAppName }}-${{ upper(parameters.environment) }}'
+    vmImageNameVaidate: 'windows-latest'
+    vmImageName: 'windows-latest'
+    resourceGroupName: ${{ parameters.webAppName }}-${{ upper(parameters.environment) }}
+    environmentName: ${{ parameters.webAppName }}-${{ upper(parameters.environment) }}
+  pool:
+      vmImage: $(vmImageNameVaidate)
+  jobs:
+  - job: AccessTokenJob
+    displayName: 'Access token Job'
+    steps:
+    - task: AzureCLI@2
+      name: SASTokenWrite
+      displayName: 'Generate Write SAS Token'
+      inputs:
+        azureSubscription: ${{ variables._ResourceGroupName }}
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          az storage account keys list \
+          --account-name '${{ parameters.environment }}${{ parameters.storageAccountName }}' \
+          --resource-group ${{ variables.ResourceGroupName }} \
+          -o tsv
+
+        # inlineScript: |
+        #   az storage account keys list \
+        #   --account-name ${{ parameters.storageAccountName }} \
+        #   --resource-group ${{ variables.ResourceGroupName }} \
+        #   --query "[0].value" \
+        #   -o tsv

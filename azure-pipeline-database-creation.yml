@@ -1,0 +1,157 @@
+parameters:
+- name: location
+  type: string
+  default: 'centralindia'
+- name: subscriptionId
+  type: string
+  default: '0b3918b5-4679-4783-9724-f17bc3d199b8'
+- name: environment
+  type: string
+  default: 'dev'
+  values: 
+    - 'dev'
+    - 'uat'
+    - 'prod'
+    - 'test'
+- name: conditiondeploybicep
+  type: boolean
+  default: true
+- name: appName
+  type: string
+  default: 'Enterprise-DemandGeneration-SEA-DB-CP'
+- name: TemplateFolder
+  type: string
+  default: 'microsoft.sql/config'
+
+
+stages:
+# Stage for Validating template of Bicep  
+- stage: ValidateTemplateSQL
+  displayName: Build and Validate Bicep for SQL Database
+  variables:
+    _ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
+    vmImageNameVaidate: 'windows-latest'
+    vmImageName: 'windows-latest'
+    resourceGroupName: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
+    environmentName: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
+  pool:
+      vmImage: $(vmImageNameVaidate)
+  jobs:
+  - job: ValidateTemplateSQL
+    displayName: 'Validate template'
+    steps:
+      - task: AzureCLI@2
+        enabled: true
+        displayName: Validate Bicep Template
+        condition: succeededOrFailed()
+        inputs:
+          azureSubscription: ${{ variables['_ResourceGroupName'] }}
+          scriptType: pscore
+          workingDirectory: ${{ parameters.TemplateFolder }}
+          scriptLocation: inlineScript
+          inlineScript: |
+            az deployment group validate --verbose `
+              --resource-group ${{ variables['_ResourceGroupName'] }} `
+              --template-file .\azuredeploy.json `
+              --parameters .\${{ parameters.environment }}-azuredeploy.parameters.json `
+              --debug
+
+ # Stage for Publishing Bicep Template 
+- stage: PublishTemplateSQL
+  displayName: Publish templates for SQL Database
+  dependsOn:
+  - ValidateTemplateSQL
+  jobs:
+  - job: PublishArtifactsIfNoFailures
+    displayName: 'Publish artifacts'
+    steps:
+    - task: CopyFiles@2
+      displayName: 'Copy Files to: $(build.artifactstagingdirectory)'
+      inputs:
+        SourceFolder: '$(build.SourcesDirectory)/${{ parameters.TemplateFolder }}'
+        Contents: |
+              **/*.json
+              **/*.bicep
+              **/*.bicepparam
+        TargetFolder: '$(build.artifactstagingdirectory)'
+        CleanTargetFolder: true
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifact: dropstorage'
+      inputs:
+        pathToPublish: $(build.artifactstagingdirectory)
+        artifactName: 'dropsql'
+        publishLocation: 'Container'
+
+# Stage for Deploying Bicep Template for Web App service
+# - stage: DepoyBicepTemplateSQL
+#   displayName: Deploying Bicep Template for SQL Database
+#   variables:
+#     _ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
+#     vmImageNameVaidate: 'windows-latest'
+#   jobs:
+#     - deployment: sqlDatabase
+#       displayName: Deploying Sql Server Template
+#       environment: ${{ variables._ResourceGroupName }}
+#       strategy:
+#         runOnce:
+#           deploy:
+#             steps:
+#             - checkout: Self
+#             - task: DownloadBuildArtifacts@0
+#               displayName: 'Download artifact'
+#               inputs:
+#                 buildType: 'current'
+#                 downloadType: 'single'
+#                 artifactName: 'dropsql'
+#                 downloadPath: '$(System.ArtifactsDirectory)'
+
+#             - task: AzureResourceManagerTemplateDeployment@3
+#               displayName: 'Sql Server Template deployment: Resource Group scope'
+#               name: BicepDeployment
+#               inputs:
+#                 azureSubscription: ${{ parameters.subscriptionId }}
+#                 azureResourceManagerConnection: ${{ variables._ResourceGroupName }}
+#                 resourceGroupName: ${{ variables._ResourceGroupName }}
+#                 location: location
+#                 csmFile: '$(Pipeline.Workspace)/dropsql/azuredeploy.bicep'
+#                 csmParametersFile: '$(Pipeline.Workspace)/dropsql/${{ parameters.environment }}-azuredeploy.parameters.json'
+#                 deploymentOutputs: 'armOutputs'
+#             - task: Bash@3
+#               displayName: Output in the same job
+#               inputs:
+#                 targetType: inline
+#                 script: |
+#                   echo "ovar = $(armOutputs)"
+
+- stage: DepoyBicepTemplateSQL
+  displayName: Deploying Bicep Template for SQL Database
+  variables:
+    _ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
+  jobs:
+    - job: sqlDatabase
+      displayName: Deploying Sql Server Template
+      pool:
+        vmImage: windows-latest
+      steps:
+        - checkout: self
+
+        - task: DownloadBuildArtifacts@0
+          displayName: 'Download artifact'
+          inputs:
+            buildType: 'current'
+            downloadType: 'single'
+            artifactName: 'dropsql'
+            downloadPath: '$(Pipeline.Workspace)'
+
+        - task: AzureResourceManagerTemplateDeployment@3
+          displayName: 'SQL Server Bicep Deployment'
+          inputs:
+            deploymentScope: Resource Group
+            azureResourceManagerConnection: ${{ variables._ResourceGroupName }}
+            subscriptionId: ${{ parameters.subscriptionId }}
+            action: Create Or Update Resource Group
+            resourceGroupName: ${{ variables._ResourceGroupName }}
+            location: ${{ parameters.location }}
+            templateLocation: Linked artifact
+            csmFile: '$(Pipeline.Workspace)/dropsql/azuredeploy.bicep'
+            csmParametersFile: '$(Pipeline.Workspace)/dropsql/${{ parameters.environment }}-azuredeploy.parameters.json'

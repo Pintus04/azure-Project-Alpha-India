@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "15281161676574201710"
+    }
+  },
+  "parameters": {
+    "serverName": {
+      "type": "string"
+    },
+    "databaseName": {
+      "type": "string"
+    },
+    "storageAccountResourceId": {
+      "type": "string"
+    },
+    "retentionDays": {
+      "type": "int",
+      "defaultValue": 90
+    }
+  },
+  "variables": {
+    "storageAccountName": "[last(split(parameters('storageAccountResourceId'), '/'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Sql/servers/databases/auditingSettings",
+      "apiVersion": "2021-11-01-preview",
+      "name": "[format('{0}/{1}/default', parameters('serverName'), parameters('databaseName'))]",
+      "properties": {
+        "state": "Enabled",
+        "storageEndpoint": "[reference(parameters('storageAccountResourceId'), '2019-04-01').primaryEndpoints.blob]",
+        "storageAccountAccessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2019-04-01').keys[0].value]",
+        "retentionDays": "[parameters('retentionDays')]",
+        "isStorageSecondaryKeyInUse": false
+      }
+    }
+  ]
+}

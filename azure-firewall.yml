@@ -1,0 +1,57 @@
+parameters:
+- name: location
+  type: string
+  default: 'centralindia'
+- name: subscriptionId
+  type: string
+  default: '0b3918b5-4679-4783-9724-f17bc3d199b8'
+- name: environment
+  type: string
+  default: 'dev'
+- name: conditiondeploybicep
+  type: boolean
+  default: true
+- name: webAppName
+  type: string
+  default: 'Enterprise-DemandGeneration-SEA-DB'
+- name: appServiceName
+  type: string
+  default: 'dotnet-connectpluscpbackend'
+- name: TemplateFolder
+  type: string
+  default: 'microsoft.sql/config'
+
+
+stages:
+# Stage for Validating template of Bicep  
+- stage: FirewallScript
+  displayName: 'Firewall Script Services'
+  variables:
+    _ResourceGroupName: '${{ parameters.webAppName }}-${{ upper(parameters.environment) }}'
+    vmImageNameVaidate: 'windows-latest'
+    vmImageName: 'windows-latest'
+    resourceGroupName: ${{ parameters.webAppName }}-${{ upper(parameters.environment) }}
+    environmentName: ${{ parameters.webAppName }}-${{ upper(parameters.environment) }}
+  pool:
+      vmImage: $(vmImageNameVaidate)
+  jobs:
+  - job: Firewallservice
+    displayName: 'Firewall App Service'
+    steps:
+      - task: AzureCLI@2
+        enabled: true
+        displayName: Firewall command
+        inputs:
+          azureSubscription: ${{ variables['_ResourceGroupName'] }}
+          scriptType: pscore
+          workingDirectory: ${{ parameters.TemplateFolder }}
+          scriptLocation: inlineScript
+          inlineScript: |
+            az sql server firewall-rule create  `
+              --resource-group ${{ variables['ResourceGroupName'] }}  `
+              --server 'prod-connectplussqlserver'  `
+              -n ContosoIPRange  `
+              --start-ip-address 0.0.0.0  `
+              --end-ip-address 255.255.255.255  `
+              --debug
+

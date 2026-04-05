@@ -1,0 +1,81 @@
+# Azure Pipeline for Key Vault Deployment with Managed Identity and Secrets
+# Disable triggers for manual execution only
+# Azure Pipeline for Key Vault Deployment with Managed Identity and Secrets
+# (Template file – No trigger here)
+
+parameters:
+- name: azureServiceConnection
+  type: string
+- name: resourceGroupName
+  type: string
+- name: location
+  type: string
+  default: centralindia
+- name: webAppName
+  type: string
+- name: keyVaultName
+  type: string
+  default: connectplus-kv-cp
+
+stages:
+
+# Stage 1 – Enable Managed Identity
+- stage: EnableManagedIdentity
+  displayName: Enable Managed Identity
+  jobs:
+  - job: EnableMI
+    pool:
+      vmImage: windows-latest
+    steps:
+    - task: AzureCLI@2
+      displayName: Enable System Assigned Identity
+      inputs:
+        azureSubscription: ${{ parameters.azureServiceConnection }}
+        scriptType: pscore
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          Write-Host "Enabling Managed Identity..."
+
+          az webapp identity assign `
+            --name ${{ parameters.webAppName }} `
+            --resource-group ${{ parameters.resourceGroupName }}
+
+          $principalId = az webapp identity show `
+            --name ${{ parameters.webAppName }} `
+            --resource-group ${{ parameters.resourceGroupName }} `
+            --query principalId -o tsv
+
+          Write-Host "PrincipalId: $principalId"
+
+          echo "##vso[task.setvariable variable=principalId;isOutput=true]$principalId"
+      name: outputStep
+
+
+# Stage 2 – Deploy Key Vault + Role Assignment
+- stage: DeployKeyVault
+  displayName: Deploy Key Vault and Assign Role
+  dependsOn: EnableManagedIdentity
+  variables:
+    principalId: $[ stageDependencies.EnableManagedIdentity.EnableMI.outputs['outputStep.principalId'] ]
+  jobs:
+  - job: DeployKV
+    pool:
+      vmImage: windows-latest
+    steps:
+    - task: AzureCLI@2
+      displayName: Deploy Key Vault Bicep
+      inputs:
+        azureSubscription: ${{ parameters.azureServiceConnection }}
+        scriptType: pscore
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          Write-Host "Deploying Key Vault..."
+
+          az deployment group create `
+            --resource-group "${{ parameters.resourceGroupName }}" `
+            --template-file "keyvault_config/keyvault.bicep" `
+            --parameters `
+              keyVaultName="${{ parameters.keyVaultName }}" `
+              principalId="$(principalId)"

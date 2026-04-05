@@ -1,0 +1,92 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "3649133610632421093"
+    }
+  },
+  "parameters": {
+    "storageSKU": {
+      "type": "string",
+      "defaultValue": "Standard_LRS"
+    },
+    "administratorLogin": {
+      "type": "string",
+      "defaultValue": "administratorLogin"
+    },
+    "administratorLoginPassword": {
+      "type": "string",
+      "defaultValue": "Admin@8874"
+    },
+    "environment": {
+      "type": "string",
+      "defaultValue": "dev"
+    },
+    "skuname": {
+      "type": "string",
+      "defaultValue": "S0"
+    },
+    "skutier": {
+      "type": "string",
+      "defaultValue": "Standard"
+    }
+  },
+  "variables": {
+    "location": "[resourceGroup().location]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2022-09-01",
+      "name": "[toLower(format('{0}cpsasqlempover', parameters('environment')))]",
+      "kind": "StorageV2",
+      "location": "[variables('location')]",
+      "properties": {
+        "supportsHttpsTrafficOnly": true,
+        "allowBlobPublicAccess": false,
+        "minimumTlsVersion": "TLS1_2",
+        "encryption": {
+          "keySource": "Microsoft.Storage",
+          "services": {
+            "blob": {
+              "enabled": true
+            }
+          }
+        }
+      },
+      "sku": {
+        "name": "[parameters('storageSKU')]"
+      }
+    },
+    {
+      "type": "Microsoft.Sql/servers",
+      "apiVersion": "2023-08-01",
+      "name": "[toLower(format('{0}-cpconnectplussqlserver', parameters('environment')))]",
+      "location": "[variables('location')]",
+      "properties": {
+        "administratorLogin": "[parameters('administratorLogin')]",
+        "administratorLoginPassword": "[parameters('administratorLoginPassword')]"
+      }
+    },
+    {
+      "type": "Microsoft.Sql/servers/databases",
+      "apiVersion": "2023-08-01",
+      "name": "[format('{0}/{1}', toLower(format('{0}-cpconnectplussqlserver', parameters('environment'))), toLower(format('{0}-cpconnectplusdatabase', parameters('environment'))))]",
+      "location": "[variables('location')]",
+      "sku": {
+        "name": "[parameters('skuname')]",
+        "tier": "[parameters('skutier')]"
+      },
+      "properties": {
+        "collation": "SQL_Latin1_General_CP1_CI_AS",
+        "maxSizeBytes": 2147483648
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Sql/servers', toLower(format('{0}-cpconnectplussqlserver', parameters('environment'))))]"
+      ]
+    }
+  ]
+}

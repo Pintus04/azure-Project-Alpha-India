@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "centralindia"
+    },
+    "logicAppName": {
+      "value": "prod-sf-sendFASSMS"
+    },
+    "recurrenceTimeZone": {
+      "value": "India Standard Time"
+    },
+    "recurrenceHours": {
+      "value": [
+        9,
+        12,
+        15,
+        18
+      ]
+    },
+    "recurrenceMinutes": {
+      "value": [
+        30
+      ]
+    },
+    "urlScheduler": {
+      "value": "https://connectplusmobile.corteva.com/api/activity/sendFASSMS"
+    }
+  }
+}

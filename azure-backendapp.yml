@@ -1,0 +1,262 @@
+parameters:
+- name: location
+  type: string
+  default: 'centralindia'
+- name: subscriptionId
+  type: string
+  default: '0b3918b5-4679-4783-9724-f17bc3d199b8'
+- name: environment
+  type: string
+  default: 'dev'
+  values: 
+    - 'dev'
+    - 'uat'
+    - 'prod'
+    - 'test'
+- name: conditiondeploybicep
+  type: boolean
+  default: true
+- name: webAppName
+  type: string
+  default: 'Enterprise-DemandGeneration-SEA-DB-CP'
+- name: appServiceName
+  type: string
+  default: 'dotnet-connectpluscpbackend'
+- name: TemplateFolder
+  type: string
+  default: 'webapp_config/Config'
+
+
+stages:
+# Stage for Validating template of Bicep  
+- stage: ValidateTemplate
+  displayName: Build and Validate Bicep
+  variables:
+    _ResourceGroupName: '${{ parameters.webAppName }}-${{ upper(parameters.environment) }}'
+    vmImageNameVaidate: 'windows-latest'
+    vmImageName: 'windows-latest'
+    nodeVersion: '20.x'
+    resourceGroupName: ${{ parameters.webAppName }}-${{ upper(parameters.environment) }}
+    environmentName: ${{ parameters.webAppName }}-${{ upper(parameters.environment) }}
+
+  pool:
+      vmImage: $(vmImageNameVaidate)
+  jobs:
+  - job: ValidateTemplate
+    displayName: 'Validate template'
+    steps:
+      - task: AzureCLI@2
+        enabled: true
+        displayName: Validate Bicep Template
+        condition: succeededOrFailed()
+        inputs:
+          azureSubscription: ${{ variables['_ResourceGroupName'] }}
+          scriptType: pscore
+          workingDirectory: ${{ parameters.TemplateFolder }}
+          scriptLocation: inlineScript
+          inlineScript: |
+            az deployment group validate --verbose `
+              --resource-group ${{ variables['_ResourceGroupName'] }} `
+              --template-file .\azureapp.json `
+              --parameters .\${{ parameters.environment }}-azureapp.parameters.json `
+              --debug
+
+ # Stage for Publishing Bicep Template 
+- stage: PublishTemplate
+  displayName: Publish templates
+  dependsOn:
+  - ValidateTemplate
+  jobs:
+  - job: PublishArtifactsIfNoFailures
+    displayName: 'Publish artifacts'
+    steps:
+    - task: CopyFiles@2
+      displayName: 'Copy Files to: $(build.artifactstagingdirectory)'
+      inputs:
+        SourceFolder: '$(build.SourcesDirectory)/${{ parameters.TemplateFolder }}'
+        Contents: |
+              **/*.json
+              **/*.bicep
+              **/*.bicepparam
+        TargetFolder: '$(build.artifactstagingdirectory)'
+        CleanTargetFolder: true
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifact: drop'
+      inputs:
+        pathToPublish: $(build.artifactstagingdirectory)
+        artifactName: 'drop'
+        publishLocation: 'Container'
+
+# Stage for Deploying Bicep Template for Web App service
+- stage: DepoyBicepTemplate
+  displayName: Deploying Bicep Template
+
+  variables:
+  - name: _ResourceGroupName 
+    value: '${{ parameters.webAppName }}-${{ upper(parameters.environment) }}'
+
+  - name: vmImageNameVaidate
+    value: 'windows-latest'
+
+  jobs:   # ✅ REQUIRED
+
+  - job: webPortal
+    displayName: Deploying Web app Service Template
+
+    pool:
+      vmImage: $(vmImageNameVaidate)
+
+    steps:
+    - checkout: self
+
+    - task: DownloadBuildArtifacts@0
+      displayName: 'Download artifact'
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'drop'
+        downloadPath: '$(System.ArtifactsDirectory)'
+
+    # First Deployment
+    - task: AzureResourceManagerTemplateDeployment@3
+      displayName: Deploy ARM/Bicep
+      inputs:
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: '${{ parameters.webAppName }}-${{ upper(parameters.environment) }}'
+        subscriptionId: ${{ parameters.subscriptionId }}
+        action: 'Create Or Update Resource Group'
+        resourceGroupName: ${{ variables._ResourceGroupName }}
+        location: 'centralindia'
+        templateLocation: 'Linked artifact'
+        csmFile: '$(System.ArtifactsDirectory)/drop/azureapp.json'
+        csmParametersFile: '$(System.ArtifactsDirectory)/drop/${{ parameters.environment }}-azureapp.parameters.json'
+
+    # Second Deployment (kept as-is)
+    - task: AzureResourceManagerTemplateDeployment@3
+      displayName: 'Web App Services Template deployment: Resource Group scope'
+      inputs:
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: '${{ parameters.webAppName }}-${{ upper(parameters.environment) }}'
+        subscriptionId: ${{ parameters.subscriptionId }}
+        action: 'Create Or Update Resource Group'
+        resourceGroupName: ${{ variables._ResourceGroupName }}
+        location: 'centralindia'
+        templateLocation: 'Linked artifact'
+        csmFile: '$(System.ArtifactsDirectory)/drop/azureapp.json'
+        csmParametersFile: '$(System.ArtifactsDirectory)/drop/${{ parameters.environment }}-azureapp.parameters.json'
+
+## Stage for Dot Net MVC project
+- stage: builddeploynodedotnet
+  displayName: Build Dot Net App
+  variables:
+    vmImageNameVaidate: 'windows-latest'
+    _ResourceGroupName: '${{ parameters.webAppName }}-${{ upper(parameters.environment) }}'
+    vmImageName: 'windows-latest'
+    resourceGroupName: ${{ parameters.webAppName }}-${{ upper(parameters.environment) }}
+    environmentName: ${{ parameters.webAppName }}-${{ upper(parameters.environment) }}
+  # pool:
+  #   vmImage: $(vmImageNameVaidate)
+  jobs:
+  - job: buiilddotnet
+    displayName: Build Dot Net App
+    steps:
+    - task: UseDotNet@2
+      displayName: 'Install .NET Core SDK'
+      inputs:
+        version: 8.x
+        performMultiLevelLookup: true
+        includePreviewVersions: true # Required for preview versions
+    - task: DotNetCoreCLI@2
+      displayName: 'Restore step for build dotnet'
+      inputs:
+        command: 'restore'
+        feedsToUse: 'select'
+        projects: '**/*.csproj'
+    - task: DotNetCoreCLI@2
+      displayName: 'dotnet build $(buildConfiguration)'
+      inputs:
+        command: 'build'
+        projects: '**/*.csproj'
+        arguments: '--configuration $(buildConfiguration)'
+    # - task: DotNetCoreCLI@2
+    #   displayName: 'dotnet Code coverage $(buildConfiguration)'
+    #   inputs:
+    #     command: test
+    #     projects: '**/*Tests/*.csproj'
+    #     arguments: '--configuration $(buildConfiguration) --collect "Code Coverage"'
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish the project'
+      inputs:
+        command: publish
+        projects: '**/*.csproj'
+        publishWebProjects: True
+        arguments: '--configuration $(BuildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+        zipAfterPublish: True
+
+    # Publish Build artifacts
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Build artifacts'
+      inputs:
+        artifactName: 'package'
+        pathToPublish: '$(Build.ArtifactStagingDirectory)'
+        publishLocation: 'Container'
+    
+    - task: DownloadBuildArtifacts@0
+      displayName: 'Download Build artifacts'
+      inputs:
+        artifactName: 'package'
+        downloadPath: '$(System.ArtifactsDirectory)'
+
+    # Deploy to Azure App Service
+    - task: AzureWebApp@1
+      displayName: 'Deploy to ${{ parameters.environment }}-${{ parameters.appServiceName }}'
+      inputs:
+        azureSubscription: ${{ variables.ResourceGroupName }}
+        resourceGroupName: ${{ variables._ResourceGroupName }}
+        appType: 'webApp'
+#        appName: ${{ parameters.appServiceName }}
+        appName: ${{ parameters.environment }}-${{ parameters.appServiceName }}
+        package: '$(System.ArtifactsDirectory)/package/**/*.zip'          
+        deploymentMethod: 'runFromPackage'
+
+    # - task: PublishPipelineArtifact@1
+    #   inputs:
+    #     targetPath: $(Build.ArtifactStagingDirectory)
+    #     artifact: ${{ parameters.appServiceName }}
+    #     publishLocation: 'Container'
+    
+# - stage: DeployDOTNET
+#   displayName: Deploy Dot Net stage
+#   variables:
+#     _ResourceGroupName: '${{ parameters.webAppName }}-${{ upper(parameters.environment) }}'
+#     vmImageNameVaidate: 'windows-latest'
+#     vmImageName: 'windows-latest'
+#     resourceGroupName: ${{ parameters.webAppName }}-${{ upper(parameters.environment) }}
+#     environmentName: ${{ parameters.webAppName }}-${{ upper(parameters.environment) }}
+#   dependsOn: builddeploynodedotnet
+#   condition: succeeded()
+#   jobs:
+#   - deployment: Deploy
+#     displayName: Deploy to Azure Web App
+#     environment: ${{ variables.ResourceGroupName }}  # resolves to just 'dev'
+#     strategy:
+#       runOnce:
+#         deploy:
+#           steps:
+#           # Download pipelines artifacts
+#           - task: DownloadPipelineArtifact@2
+#             inputs:
+#               artifactName: '${{ parameters.appServiceName }}'
+#               buildType: 'current'
+#               targetPath: '$(Build.ArtifactStagingDirectory)\${{ parameters.appServiceName }}'
+
+#           # Deploy to Azure App Service
+#           - task: AzureWebApp@1
+#             displayName: 'Deploy to ${{ parameters.appServiceName }}'
+#             inputs:
+#               azureSubscription: ${{ variables.ResourceGroupName }}
+#               resourceGroupName: ${{ variables._ResourceGroupName }}
+#               appType: 'webApp'
+#               appName: ${{ parameters.appServiceName }}
+#               package: '$(Build.ArtifactStagingDirectory)\${{ parameters.appServiceName }}\*.zip'
+    
