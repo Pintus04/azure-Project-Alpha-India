@@ -29,10 +29,10 @@ stages:
 - stage: ValidateTemplateSQL
   displayName: Build and Validate Bicep for SQL Database
   variables:
-    _ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
+    #_ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
     vmImageNameVaidate: 'windows-latest'
     vmImageName: 'windows-latest'
-    resourceGroupName: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
+    #resourceGroupName: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
     #environmentName: ${{ parameters.appName }}-${{ upper(parameters.environment) }}
   pool:
       vmImage: $(vmImageNameVaidate)
@@ -49,12 +49,12 @@ stages:
           scriptType: pscore
           workingDirectory: ${{ parameters.TemplateFolder }}
           scriptLocation: inlineScript
-          inlineScript: |
-            az deployment group validate --verbose `
-              --resource-group ${{ variables['_ResourceGroupName'] }} `
-              --template-file .\azuredeploy.json `
-              --parameters .\${{ parameters.environment }}-azuredeploy.parameters.json `
-              --debug
+          # inlineScript: |
+          #   az deployment group validate --verbose `
+          #     --resource-group ${{ variables['_ResourceGroupName'] }} `
+          #     --template-file .\azuredeploy.json `
+          #     --parameters .\${{ parameters.environment }}-azuredeploy.parameters.json `
+          #     --debug
 
  # Stage for Publishing Bicep Template 
 - stage: PublishTemplateSQL
@@ -126,7 +126,7 @@ stages:
 - stage: DepoyBicepTemplateSQL
   displayName: Deploying Bicep Template for SQL Database
   variables:
-    _ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
+    #_ResourceGroupName: '${{ parameters.appName }}-${{ upper(parameters.environment) }}'
   jobs:
     - job: sqlDatabase
       displayName: Deploying Sql Server Template
@@ -154,4 +154,4 @@ stages:
             location: ${{ parameters.location }}
             templateLocation: Linked artifact
             csmFile: '$(Pipeline.Workspace)/dropsql/azuredeploy.bicep'
-            csmParametersFile: '$(Pipeline.Workspace)/dropsql/${{ parameters.environment }}-azuredeploy.parameters.json'
+            #csmParametersFile: '$(Pipeline.Workspace)/dropsql/${{ parameters.environment }}-azuredeploy.parameters.json'
