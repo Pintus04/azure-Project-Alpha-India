@@ -45,7 +45,7 @@ stages:
    parameters:
      appName: ${{ parameters.appName }}
      subscriptionId: ${{ parameters.subscriptionId }}
-     environment: ${{ parameters.environment }}
+     #environment: ${{ parameters.environment }}
      TemplateFolder:  ${{ parameters.TemplateFolder }}
      #condition: succeeded()
 
